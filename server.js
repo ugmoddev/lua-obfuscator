@@ -15,8 +15,14 @@ app.use(express.static('public'));
 
 // Đảm bảo thư mục data tồn tại
 const DATA_DIR = path.join(__dirname, 'data');
+const STATIC_DIR = path.join(__dirname, 'static_content_130526');
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(STATIC_DIR)) {
+  fs.mkdirSync(STATIC_DIR, { recursive: true });
 }
 
 const CODES_FILE = path.join(DATA_DIR, 'codes.lua');
@@ -198,20 +204,30 @@ function encodeLuaCode(code) {
 }`;
 }
 
-// ============ TẠO SCRIPT VỚI URL CỦA WEB ============
+// ============ TẠO SCRIPT HOÀN CHỈNH ============
 function createFullScript(encoded, id, baseUrl) {
-  // Sử dụng baseUrl của web thay vì cdn.luacrack.site
   return `${encoded}
 
-local readfileResult = readfile('static_content_130526/init-74c74f95foy-marbeg.lua')
+-- Lấy code từ web và lưu vào file
+local readfileResult = readfile('static_content_130526/init-${id}.lua')
 local fileContent_3 = #readfileResult
+
+-- Tạo thư mục nếu chưa có
 local makefolderResult = makefolder("static_content_130526")
-writefile('static_content_130526/init-74c74f95foy-marbeg.lua', game:HttpGet("${baseUrl}/api/raw/${id}", true))
+
+-- Tải code từ web và ghi vào file
+writefile('static_content_130526/init-${id}.lua', game:HttpGet("${baseUrl}/api/raw-code/${id}", true))
+
+-- Đọc danh sách file
 local listfilesResult = listfiles("./static_content_130526")
-    local match = val_9:match('(init%-.-)%.lua$')
-    local static_content_130526 = "static_content_130526" .. "/" .. match .. ".lua"
-    local delfileResult = delfile("static_content_130526")
-local loaded = loadstring(game:HttpGet("${baseUrl}/api/raw/${id}", true))()
+local match = val_9:match('(init%-.-)%.lua$')
+local static_content_130526 = "static_content_130526" .. "/" .. match .. ".lua"
+
+-- Xóa file tạm
+local delfileResult = delfile("static_content_130526")
+
+-- Load code từ web
+local loaded = loadstring(game:HttpGet("${baseUrl}/api/raw-code/${id}", true))()
 return loaded`;
 }
 
@@ -236,7 +252,7 @@ app.post('/api/save', (req, res) => {
     // Mã hóa code
     const encoded = encodeLuaCode(code);
     
-    // Lấy base URL của web
+    // Lấy base URL
     const protocol = req.protocol;
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
@@ -259,9 +275,13 @@ app.post('/api/save', (req, res) => {
       size: code.length
     };
 
+    // Lưu code vào file static để readfile có thể đọc
+    const staticFile = path.join(STATIC_DIR, `init-${id}.lua`);
+    fs.writeFileSync(staticFile, code, 'utf8');
+
     if (saveCodes(codes)) {
       console.log(`✅ Đã lưu code ID: ${id}, Tên: ${codes[id].name}`);
-      console.log(`🔗 URL: ${baseUrl}/api/raw/${id}`);
+      console.log(`📁 File: ${staticFile}`);
       
       res.json({
         success: true,
@@ -288,14 +308,13 @@ app.post('/api/save', (req, res) => {
   }
 });
 
-// 2. Lấy code raw (cho loadstring) - TRẢ VỀ SCRIPT ĐÃ MÃ HÓA
+// 2. Lấy script đã mã hóa (cho loadstring)
 app.get('/api/raw/:id', (req, res) => {
   try {
     const { id } = req.params;
-    console.log(`🔍 Đang tìm code ID: ${id}`);
+    console.log(`🔍 Đang tìm script ID: ${id}`);
     
     const codes = loadCodes();
-    console.log(`📚 Tổng số codes: ${Object.keys(codes).length}`);
     
     if (!codes[id]) {
       console.log(`❌ Không tìm thấy ID: ${id}`);
@@ -303,7 +322,6 @@ app.get('/api/raw/:id', (req, res) => {
     }
 
     console.log(`✅ Tìm thấy code: ${codes[id].name}`);
-    console.log(`📝 Script length: ${codes[id].script?.length || 0}`);
     
     // Tăng lượt xem
     codes[id].views = (codes[id].views || 0) + 1;
@@ -320,54 +338,45 @@ app.get('/api/raw/:id', (req, res) => {
   }
 });
 
-// 3. Lấy code gốc (không mã hóa)
-app.get('/api/raw-original/:id', (req, res) => {
+// 3. Lấy code gốc (cho readfile và loadstring bên trong script)
+app.get('/api/raw-code/:id', (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`🔍 Đang tìm code gốc ID: ${id}`);
+    
     const codes = loadCodes();
     
     if (!codes[id]) {
+      console.log(`❌ Không tìm thấy ID: ${id}`);
       return res.status(404).send('-- Code không tồn tại');
     }
+
+    console.log(`✅ Trả về code gốc: ${codes[id].name}`);
+    console.log(`📝 Code length: ${codes[id].code?.length || 0}`);
 
     res.set('Content-Type', 'text/plain');
     res.send(codes[id].code);
 
   } catch (error) {
-    console.error('Lỗi raw-original:', error);
-    res.status(500).send('-- Lỗi server');
+    console.error('Lỗi raw-code:', error);
+    res.status(500).send('-- Lỗi server: ' + error.message);
   }
 });
 
-// 4. Lấy script đã mã hóa (dạng JSON)
-app.get('/api/script/:id', (req, res) => {
+// 4. Lấy file static (cho readfile)
+app.get('/static/:filename', (req, res) => {
   try {
-    const { id } = req.params;
-    const codes = loadCodes();
+    const { filename } = req.params;
+    const filePath = path.join(STATIC_DIR, filename);
     
-    if (!codes[id]) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Code không tồn tại' 
-      });
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(404).send('File không tồn tại');
     }
-
-    codes[id].downloads = (codes[id].downloads || 0) + 1;
-    codes[id].updatedAt = new Date().toISOString();
-    saveCodes(codes);
-
-    res.json({
-      success: true,
-      script: codes[id].script,
-      encoded: codes[id].encoded
-    });
-
   } catch (error) {
-    console.error('Lỗi script:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
+    console.error('Lỗi static:', error);
+    res.status(500).send('Lỗi server');
   }
 });
 
@@ -446,6 +455,12 @@ app.delete('/api/delete/:id', (req, res) => {
     delete codes[id];
     saveCodes(codes);
 
+    // Xóa file static
+    const staticFile = path.join(STATIC_DIR, `init-${id}.lua`);
+    if (fs.existsSync(staticFile)) {
+      fs.unlinkSync(staticFile);
+    }
+
     console.log(`🗑️ Đã xóa code: ${name} (${id})`);
 
     res.json({
@@ -463,56 +478,25 @@ app.delete('/api/delete/:id', (req, res) => {
   }
 });
 
-// 8. Export codes.lua
-app.get('/api/export', (req, res) => {
-  try {
-    if (fs.existsSync(CODES_FILE)) {
-      res.download(CODES_FILE, 'codes.lua');
-    } else {
-      res.status(404).json({ 
-        success: false, 
-        error: 'File codes.lua không tồn tại' 
-      });
-    }
-  } catch (error) {
-    console.error('Lỗi export:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// 9. View nội dung codes.lua
-app.get('/api/view-db', (req, res) => {
-  try {
-    if (fs.existsSync(CODES_FILE)) {
-      const content = fs.readFileSync(CODES_FILE, 'utf8');
-      res.set('Content-Type', 'text/plain');
-      res.send(content);
-    } else {
-      res.status(404).send('File codes.lua chưa được tạo');
-    }
-  } catch (error) {
-    console.error('Lỗi view-db:', error);
-    res.status(500).send('Lỗi server');
-  }
-});
-
-// 10. Health check
+// 8. Health check
 app.get('/health', (req, res) => {
   try {
     const codes = loadCodes();
     const fileExists = fs.existsSync(CODES_FILE);
     const fileSize = fileExists ? fs.statSync(CODES_FILE).size : 0;
     
+    // Đếm số file static
+    const staticFiles = fs.readdirSync(STATIC_DIR).filter(f => f.endsWith('.lua'));
+    
     res.json({ 
       status: 'ok', 
       timestamp: new Date().toISOString(),
       totalCodes: Object.keys(codes).length,
+      staticFiles: staticFiles.length,
       fileExists: fileExists,
       fileSize: fileSize,
       filePath: CODES_FILE,
+      staticPath: STATIC_DIR,
       uptime: process.uptime()
     });
   } catch (error) {
@@ -523,7 +507,7 @@ app.get('/health', (req, res) => {
   }
 });
 
-// 11. Root - Serve index.html
+// 9. Root - Serve index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -534,18 +518,20 @@ app.listen(PORT, () => {
   console.log(`✅ Server đang chạy tại port ${PORT}`);
   console.log(`🌐 URL: http://localhost:${PORT}`);
   console.log(`📁 Data directory: ${DATA_DIR}`);
+  console.log(`📁 Static directory: ${STATIC_DIR}`);
   console.log(`📄 File database: ${CODES_FILE}`);
   
+  // Kiểm tra các file
   if (fs.existsSync(CODES_FILE)) {
     const stats = fs.statSync(CODES_FILE);
-    console.log(`📊 File size: ${(stats.size / 1024).toFixed(2)} KB`);
+    console.log(`📊 Database size: ${(stats.size / 1024).toFixed(2)} KB`);
     const codes = loadCodes();
     console.log(`📝 Total codes: ${Object.keys(codes).length}`);
-    if (Object.keys(codes).length > 0) {
-      const ids = Object.keys(codes).slice(0, 5);
-      console.log(`🔑 Sample IDs: ${ids.join(', ')}${Object.keys(codes).length > 5 ? '...' : ''}`);
-    }
   } else {
     console.log('📝 Chưa có codes.lua, sẽ tạo khi lưu code đầu tiên');
   }
+  
+  // Liệt kê file static
+  const staticFiles = fs.readdirSync(STATIC_DIR).filter(f => f.endsWith('.lua'));
+  console.log(`📁 Static files: ${staticFiles.length}`);
 });
