@@ -3,7 +3,6 @@ const multer = require('multer');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -144,7 +143,7 @@ function escapeLuaString(str) {
     .replace(/\t/g, '\\t');
 }
 
-// ============ MÃ HÓA NÂNG CAO ============
+// ============ HÀM MÃ HÓA ============
 
 function generateId(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -164,7 +163,7 @@ function generateRandomString(length) {
   return result;
 }
 
-// MÃ HÓA CODE THÀNH DẠNG AN TOÀN - KHÔNG LỖI
+// Mã hóa an toàn - KHÔNG CÓ LỖI CÚ PHÁP
 function encodeLuaCodeSafe(code, id) {
   // Chuyển code thành hex
   const hex = Buffer.from(code, 'utf8').toString('hex');
@@ -174,7 +173,7 @@ function encodeLuaCodeSafe(code, id) {
   const key2 = generateRandomString(16);
   const key3 = generateRandomString(16);
   
-  // Tạo tên biến ngẫu nhiên (mỗi lần khác nhau)
+  // Tạo tên biến ngẫu nhiên
   const v1 = '_' + generateRandomString(8);
   const v2 = '_' + generateRandomString(8);
   const v3 = '_' + generateRandomString(8);
@@ -186,54 +185,40 @@ function encodeLuaCodeSafe(code, id) {
   const v9 = '_' + generateRandomString(8);
   const v10 = '_' + generateRandomString(8);
   const v11 = '_' + generateRandomString(8);
+  const v12 = '_' + generateRandomString(8);
   
-  // Tạo script obfuscated với nhiều lớp
   return `local ${v1}="${hex}"
 local ${v2}="${key1}"
 local ${v3}="${key2}"
 local ${v4}="${key3}"
 
--- Tạo bảng các hàm
-local ${v5}={
-  s=string,
-  t=table,
-  c=string.char,
-  g=string.gsub,
-  b=tonumber,
-  h=string.sub,
-  i=table.insert,
-  n=#,
-  l=loadstring,
-  e=error
-}
+local ${v5}=string
+local ${v6}=table
+local ${v7}=${v5}.char
+local ${v8}=${v5}.sub
+local ${v9}=tonumber
 
--- Hàm giải mã thông minh
-local ${v6}=function(${v8})
-  local ${v9}=""
-  for ${v7}=1,${v5}.n(${v8}),2 do
-    local ${v10}=${v5}.b(${v5}.h(${v8},${v7},${v7}+1),16)
-    if ${v10} then
-      ${v9}=${v9}..${v5}.c(${v10})
+local function ${v10}(str)
+  local result=""
+  for i=1,#str,2 do
+    local byte=${v9}(${v8}(str,i,i+1),16)
+    if byte then
+      result=result..${v7}(byte)
     end
   end
-  return ${v9}
+  return result
 end
 
--- Giải mã nhiều lớp
-local ${v11}=${v6}(${v1})
-
--- Thực thi an toàn
-local ${v8}0=${v5}.l(${v11})
-if ${v8}0 then
-  ${v8}0()
-else
-  ${v5}.e("Không thể tải code")
+local ${v11}=${v10}(${v1})
+local ${v12}=loadstring(${v11})
+if ${v12} then
+  ${v12}()
 end`;
 }
 
 // ============ TẠO SCRIPT HOÀN CHỈNH ============
 function createFullScript(encoded, id, baseUrl) {
-  const banner = `--[[
+  return `--[[
   ██████╗ ██████╗ ███████╗██╗   ██╗███████╗██╗  ██╗██╗
   ██╔══██╗██╔══██╗██╔════╝██║   ██║██╔════╝██║  ██║██║
   ██████╔╝██████╔╝█████╗  ██║   ██║███████╗███████║██║
@@ -243,7 +228,6 @@ function createFullScript(encoded, id, baseUrl) {
 ]]--
 
 ${encoded}`;
-  return banner;
 }
 
 // ============ API ENDPOINTS ============
@@ -268,7 +252,6 @@ app.post('/api/save', (req, res) => {
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
     
-    // Mã hóa an toàn
     const encoded = encodeLuaCodeSafe(code, id);
     const script = createFullScript(encoded, id, baseUrl);
 
@@ -286,7 +269,6 @@ app.post('/api/save', (req, res) => {
       size: code.length
     };
 
-    // Lưu code gốc
     const staticFile = path.join(STATIC_DIR, `init-${id}.lua`);
     fs.writeFileSync(staticFile, code, 'utf8');
 
