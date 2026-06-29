@@ -172,7 +172,8 @@ function encryptData(data) {
   }).join('');
 }
 
-function encodeLuaCode(code) {
+// Mã hóa code với ID được nhúng vào _bsdata0
+function encodeLuaCodeWithId(code, id) {
   const num1 = Math.floor(Math.random() * 2147483647);
   const num2 = Math.floor(Math.random() * 2147483647);
   const num3 = Math.floor(Math.random() * 2147483647);
@@ -188,6 +189,7 @@ function encodeLuaCode(code) {
   const hexString = Buffer.from(code).toString('hex');
   const encryptedData = encryptData(code);
   
+  // ID được nhúng vào _bsdata0 để script có thể tìm ra
   return `_bsdata0 = {
     ${num1},
     '${randomString1}',
@@ -200,34 +202,45 @@ function encodeLuaCode(code) {
     ${num7},
     ${num5},
     '${hexString}',
-    '${encryptedData}'
+    '${encryptedData}',
+    '${id}'
 }`;
 }
 
-// ============ TẠO SCRIPT HOÀN CHỈNH ============
+// ============ TẠO SCRIPT CHỈ CHỨA DOMAIN ============
 function createFullScript(encoded, id, baseUrl) {
+  // Chỉ chứa domain, không chứa ID trong URL
   return `${encoded}
 
--- Lấy code từ web và lưu vào file
-local readfileResult = readfile('static_content_130526/init-${id}.lua')
+-- Chỉ lưu domain, không lưu ID
+local domain = "${baseUrl}"
+
+-- Lấy ID từ _bsdata0
+local scriptId = _bsdata0[13]  -- Phần tử thứ 13 chứa ID
+
+-- Tạo tên file từ ID
+local fileName = "static_content_130526/init-" .. scriptId .. ".lua"
+
+-- Đọc file nếu tồn tại
+local readfileResult = readfile(fileName)
 local fileContent_3 = #readfileResult
 
--- Tạo thư mục nếu chưa có
+-- Tạo thư mục
 local makefolderResult = makefolder("static_content_130526")
 
--- Tải code từ web và ghi vào file
-writefile('static_content_130526/init-${id}.lua', game:HttpGet("${baseUrl}/api/raw-code/${id}", true))
+-- Tải code từ web (chỉ dùng domain + ID lấy từ _bsdata0)
+writefile(fileName, game:HttpGet(domain .. "/api/raw-code/" .. scriptId, true))
 
 -- Đọc danh sách file
 local listfilesResult = listfiles("./static_content_130526")
 local match = val_9:match('(init%-.-)%.lua$')
 local static_content_130526 = "static_content_130526" .. "/" .. match .. ".lua"
 
--- Xóa file tạm
+-- Xóa file
 local delfileResult = delfile("static_content_130526")
 
--- Load code từ web
-local loaded = loadstring(game:HttpGet("${baseUrl}/api/raw-code/${id}", true))()
+-- Load code từ web (chỉ dùng domain + ID lấy từ _bsdata0)
+local loaded = loadstring(game:HttpGet(domain .. "/api/raw-code/" .. scriptId, true))()
 return loaded`;
 }
 
@@ -249,15 +262,15 @@ app.post('/api/save', (req, res) => {
     const id = generateId();
     const timestamp = new Date().toISOString();
     
-    // Mã hóa code
-    const encoded = encodeLuaCode(code);
-    
     // Lấy base URL
     const protocol = req.protocol;
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
     
-    // Tạo script với URL của web
+    // Mã hóa code với ID nhúng vào _bsdata0
+    const encoded = encodeLuaCodeWithId(code, id);
+    
+    // Tạo script chỉ chứa domain
     const script = createFullScript(encoded, id, baseUrl);
 
     // Lưu vào database
@@ -275,13 +288,14 @@ app.post('/api/save', (req, res) => {
       size: code.length
     };
 
-    // Lưu code vào file static để readfile có thể đọc
+    // Lưu code vào file static
     const staticFile = path.join(STATIC_DIR, `init-${id}.lua`);
     fs.writeFileSync(staticFile, code, 'utf8');
 
     if (saveCodes(codes)) {
       console.log(`✅ Đã lưu code ID: ${id}, Tên: ${codes[id].name}`);
       console.log(`📁 File: ${staticFile}`);
+      console.log(`🔗 Domain: ${baseUrl}`);
       
       res.json({
         success: true,
@@ -290,7 +304,8 @@ app.post('/api/save', (req, res) => {
         url: `${baseUrl}/api/raw/${id}`,
         script: script,
         encoded: encoded,
-        totalCodes: Object.keys(codes).length
+        totalCodes: Object.keys(codes).length,
+        domain: baseUrl
       });
     } else {
       res.status(500).json({ 
@@ -352,7 +367,6 @@ app.get('/api/raw-code/:id', (req, res) => {
     }
 
     console.log(`✅ Trả về code gốc: ${codes[id].name}`);
-    console.log(`📝 Code length: ${codes[id].code?.length || 0}`);
 
     res.set('Content-Type', 'text/plain');
     res.send(codes[id].code);
@@ -363,24 +377,7 @@ app.get('/api/raw-code/:id', (req, res) => {
   }
 });
 
-// 4. Lấy file static (cho readfile)
-app.get('/static/:filename', (req, res) => {
-  try {
-    const { filename } = req.params;
-    const filePath = path.join(STATIC_DIR, filename);
-    
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).send('File không tồn tại');
-    }
-  } catch (error) {
-    console.error('Lỗi static:', error);
-    res.status(500).send('Lỗi server');
-  }
-});
-
-// 5. Lấy danh sách tất cả codes
+// 4. Lấy danh sách tất cả codes
 app.get('/api/list', (req, res) => {
   try {
     const codes = loadCodes();
@@ -411,7 +408,7 @@ app.get('/api/list', (req, res) => {
   }
 });
 
-// 6. Lấy chi tiết một code
+// 5. Lấy chi tiết một code
 app.get('/api/code/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -438,7 +435,7 @@ app.get('/api/code/:id', (req, res) => {
   }
 });
 
-// 7. Xóa code
+// 6. Xóa code
 app.delete('/api/delete/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -478,14 +475,13 @@ app.delete('/api/delete/:id', (req, res) => {
   }
 });
 
-// 8. Health check
+// 7. Health check
 app.get('/health', (req, res) => {
   try {
     const codes = loadCodes();
     const fileExists = fs.existsSync(CODES_FILE);
     const fileSize = fileExists ? fs.statSync(CODES_FILE).size : 0;
     
-    // Đếm số file static
     const staticFiles = fs.readdirSync(STATIC_DIR).filter(f => f.endsWith('.lua'));
     
     res.json({ 
@@ -507,7 +503,7 @@ app.get('/health', (req, res) => {
   }
 });
 
-// 9. Root - Serve index.html
+// 8. Root - Serve index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -521,7 +517,6 @@ app.listen(PORT, () => {
   console.log(`📁 Static directory: ${STATIC_DIR}`);
   console.log(`📄 File database: ${CODES_FILE}`);
   
-  // Kiểm tra các file
   if (fs.existsSync(CODES_FILE)) {
     const stats = fs.statSync(CODES_FILE);
     console.log(`📊 Database size: ${(stats.size / 1024).toFixed(2)} KB`);
@@ -531,7 +526,6 @@ app.listen(PORT, () => {
     console.log('📝 Chưa có codes.lua, sẽ tạo khi lưu code đầu tiên');
   }
   
-  // Liệt kê file static
   const staticFiles = fs.readdirSync(STATIC_DIR).filter(f => f.endsWith('.lua'));
   console.log(`📁 Static files: ${staticFiles.length}`);
 });
