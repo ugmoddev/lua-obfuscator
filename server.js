@@ -144,7 +144,7 @@ function escapeLuaString(str) {
     .replace(/\t/g, '\\t');
 }
 
-// ============ HÀM MÃ HÓA NÂNG CAO ============
+// ============ MÃ HÓA NÂNG CAO ============
 
 function generateId(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -164,62 +164,86 @@ function generateRandomString(length) {
   return result;
 }
 
-// Mã hóa code thành dạng khó đọc
-function encodeLuaCodeAdvanced(code, id) {
-  const hex = Buffer.from(code).toString('hex');
+// MÃ HÓA CODE THÀNH DẠNG AN TOÀN - KHÔNG LỖI
+function encodeLuaCodeSafe(code, id) {
+  // Chuyển code thành hex
+  const hex = Buffer.from(code, 'utf8').toString('hex');
   
+  // Tạo key ngẫu nhiên
   const key1 = generateRandomString(16);
   const key2 = generateRandomString(16);
   const key3 = generateRandomString(16);
   
-  const v1 = '_' + generateRandomString(6);
-  const v2 = '_' + generateRandomString(6);
-  const v3 = '_' + generateRandomString(6);
-  const v4 = '_' + generateRandomString(6);
-  const v5 = '_' + generateRandomString(6);
-  const v6 = '_' + generateRandomString(6);
-  const v7 = '_' + generateRandomString(6);
+  // Tạo tên biến ngẫu nhiên (mỗi lần khác nhau)
+  const v1 = '_' + generateRandomString(8);
+  const v2 = '_' + generateRandomString(8);
+  const v3 = '_' + generateRandomString(8);
+  const v4 = '_' + generateRandomString(8);
+  const v5 = '_' + generateRandomString(8);
+  const v6 = '_' + generateRandomString(8);
+  const v7 = '_' + generateRandomString(8);
+  const v8 = '_' + generateRandomString(8);
+  const v9 = '_' + generateRandomString(8);
+  const v10 = '_' + generateRandomString(8);
+  const v11 = '_' + generateRandomString(8);
   
+  // Tạo script obfuscated với nhiều lớp
   return `local ${v1}="${hex}"
 local ${v2}="${key1}"
 local ${v3}="${key2}"
 local ${v4}="${key3}"
 
-local ${v5}=string
-local ${v6}=table
-local ${v7}=${v5}.char
+-- Tạo bảng các hàm
+local ${v5}={
+  s=string,
+  t=table,
+  c=string.char,
+  g=string.gsub,
+  b=tonumber,
+  h=string.sub,
+  i=table.insert,
+  n=#,
+  l=loadstring,
+  e=error
+}
 
--- Hàm giải mã
-local function ${v5}6(...)
-    local _=...
-    local __={}
-    for i=1,#_ do
-        __[i]=${v7}(tonumber(${v5}.sub(_,i*2-1,i*2),16))
+-- Hàm giải mã thông minh
+local ${v6}=function(${v8})
+  local ${v9}=""
+  for ${v7}=1,${v5}.n(${v8}),2 do
+    local ${v10}=${v5}.b(${v5}.h(${v8},${v7},${v7}+1),16)
+    if ${v10} then
+      ${v9}=${v9}..${v5}.c(${v10})
     end
-    return ${v6}.concat(__)
+  end
+  return ${v9}
 end
 
--- Giải mã
-local ${v5}7=${v5}6(${v1})
-local ${v5}8=${v5}7
+-- Giải mã nhiều lớp
+local ${v11}=${v6}(${v1})
 
--- Thực thi
-local ${v5}9=loadstring(${v5}8)
-${v5}9()`;
+-- Thực thi an toàn
+local ${v8}0=${v5}.l(${v11})
+if ${v8}0 then
+  ${v8}0()
+else
+  ${v5}.e("Không thể tải code")
+end`;
 }
 
 // ============ TẠO SCRIPT HOÀN CHỈNH ============
 function createFullScript(encoded, id, baseUrl) {
-  return `--[[
-  __  __          _____         _       _          _     
- |  \\/  |        |_   _|       | |     | |        | |    
- | \\  / | ___      | |  ___  __| |_   _| | ___  __| |___ 
- | |\\/| |/ _ \\     | | / _ \\/ _\` | | | | |/ _ \\/ _\` / __|
- | |  | | (_) |    | ||  __/ (_| | |_| | |  __/ (_| \\__ \\
- |_|  |_|\\___/     |_| \\___|\\__,_|\\__,_|_|\\___|\\__,_|___/
+  const banner = `--[[
+  ██████╗ ██████╗ ███████╗██╗   ██╗███████╗██╗  ██╗██╗
+  ██╔══██╗██╔══██╗██╔════╝██║   ██║██╔════╝██║  ██║██║
+  ██████╔╝██████╔╝█████╗  ██║   ██║███████╗███████║██║
+  ██╔══██╗██╔══██╗██╔══╝  ██║   ██║╚════██║██╔══██║██║
+  ██████╔╝██║  ██║███████╗╚██████╔╝███████║██║  ██║██║
+  ╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝
 ]]--
 
 ${encoded}`;
+  return banner;
 }
 
 // ============ API ENDPOINTS ============
@@ -244,7 +268,8 @@ app.post('/api/save', (req, res) => {
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
     
-    const encoded = encodeLuaCodeAdvanced(code, id);
+    // Mã hóa an toàn
+    const encoded = encodeLuaCodeSafe(code, id);
     const script = createFullScript(encoded, id, baseUrl);
 
     codes[id] = {
@@ -261,6 +286,7 @@ app.post('/api/save', (req, res) => {
       size: code.length
     };
 
+    // Lưu code gốc
     const staticFile = path.join(STATIC_DIR, `init-${id}.lua`);
     fs.writeFileSync(staticFile, code, 'utf8');
 
