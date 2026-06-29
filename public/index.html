@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lua Code Encoder</title>
+    <title>Lua Code Storage & Loadstring</title>
     <style>
         * {
             margin: 0;
@@ -12,35 +12,45 @@
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e1e2f, #2d2d44);
+            background: linear-gradient(135deg, #0f0f1a, #1a1a2e);
             color: #e0e0e0;
             min-height: 100vh;
             padding: 20px;
         }
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
         h1 {
             text-align: center;
             margin-bottom: 30px;
             color: #64ffda;
-            text-shadow: 0 0 10px rgba(100, 255, 218, 0.3);
+            text-shadow: 0 0 20px rgba(100, 255, 218, 0.3);
             font-size: 2.5rem;
+        }
+        .subtitle {
+            text-align: center;
+            color: #8899aa;
+            margin-bottom: 30px;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
         }
         .card {
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border-radius: 15px;
             padding: 25px;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
         .card h2 {
             color: #64ffda;
             margin-bottom: 20px;
-            font-size: 1.5rem;
+            font-size: 1.3rem;
         }
         .input-group {
             margin-bottom: 15px;
@@ -64,7 +74,7 @@
             transition: all 0.3s;
         }
         .input-group textarea {
-            min-height: 200px;
+            min-height: 150px;
             resize: vertical;
         }
         .input-group textarea:focus,
@@ -75,7 +85,7 @@
         }
         .btn {
             background: linear-gradient(135deg, #64ffda, #00bcd4);
-            color: #1e1e2f;
+            color: #1a1a2e;
             border: none;
             padding: 12px 30px;
             border-radius: 8px;
@@ -95,23 +105,24 @@
             cursor: not-allowed;
             transform: none;
         }
-        .btn-secondary {
-            background: linear-gradient(135deg, #78909c, #546e7a);
-        }
-        .btn-secondary:hover {
-            box-shadow: 0 5px 20px rgba(120, 144, 156, 0.3);
-        }
         .btn-danger {
             background: linear-gradient(135deg, #ef5350, #c62828);
+            color: white;
         }
         .btn-danger:hover {
             box-shadow: 0 5px 20px rgba(239, 83, 80, 0.3);
         }
+        .btn-secondary {
+            background: linear-gradient(135deg, #78909c, #546e7a);
+            color: white;
+        }
         .btn-success {
             background: linear-gradient(135deg, #66bb6a, #2e7d32);
+            color: white;
         }
-        .btn-success:hover {
-            box-shadow: 0 5px 20px rgba(102, 187, 106, 0.3);
+        .btn-primary {
+            background: linear-gradient(135deg, #42a5f5, #1565c0);
+            color: white;
         }
         .output {
             margin-top: 15px;
@@ -119,7 +130,7 @@
         }
         .output textarea {
             width: 100%;
-            min-height: 300px;
+            min-height: 200px;
             padding: 15px;
             background: rgba(0, 0, 0, 0.5);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -128,10 +139,6 @@
             font-family: 'Consolas', monospace;
             font-size: 12px;
             resize: vertical;
-        }
-        .output textarea:focus {
-            outline: none;
-            border-color: #64ffda;
         }
         .copy-btn {
             position: absolute;
@@ -148,30 +155,6 @@
         }
         .copy-btn:hover {
             background: rgba(100, 255, 218, 0.3);
-        }
-        .file-upload {
-            border: 2px dashed rgba(255, 255, 255, 0.2);
-            padding: 30px;
-            text-align: center;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .file-upload:hover {
-            border-color: #64ffda;
-            background: rgba(100, 255, 218, 0.05);
-        }
-        .file-upload input[type="file"] {
-            display: none;
-        }
-        .file-upload .icon {
-            font-size: 48px;
-            margin-bottom: 10px;
-        }
-        .file-upload .file-name {
-            color: #64ffda;
-            margin-top: 10px;
-            font-weight: 500;
         }
         .status {
             padding: 10px;
@@ -197,10 +180,45 @@
             border: 1px solid #2196f3;
             color: #2196f3;
         }
-        .grid-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+        .code-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .code-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid #64ffda;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .code-item:hover {
+            background: rgba(100, 255, 218, 0.05);
+            transform: translateX(5px);
+        }
+        .code-item .name {
+            color: #64ffda;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .code-item .id {
+            color: #8899aa;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .code-item .desc {
+            color: #b0b0b0;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .code-item .stats {
+            color: #8899aa;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        .code-item .stats span {
+            margin-right: 15px;
         }
         .loading {
             display: inline-block;
@@ -214,21 +232,14 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        .stats {
-            display: flex;
-            gap: 20px;
-            margin-top: 10px;
-            flex-wrap: wrap;
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #8899aa;
         }
-        .stat-item {
-            background: rgba(0,0,0,0.3);
-            padding: 8px 15px;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-        .stat-item span {
-            color: #64ffda;
-            font-weight: bold;
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
         }
         @media (max-width: 768px) {
             .grid-2 {
@@ -237,240 +248,315 @@
             h1 {
                 font-size: 1.8rem;
             }
-            .stats {
-                flex-direction: column;
-                gap: 5px;
-            }
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #64ffda;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00bcd4;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-info {
+            background: rgba(33, 150, 243, 0.2);
+            color: #2196f3;
+        }
+        .badge-success {
+            background: rgba(100, 255, 218, 0.2);
+            color: #64ffda;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔒 Lua Code Encoder</h1>
+        <h1>📦 Lua Code Storage</h1>
+        <p class="subtitle">Lưu trữ, mã hóa và tạo loadstring cho code Lua của bạn</p>
 
-        <!-- Upload File -->
-        <div class="card">
-            <h2>📤 Upload File Lua</h2>
-            <div class="file-upload" id="fileDropZone">
-                <div class="icon">📁</div>
-                <p>Kéo thả file Lua hoặc click để chọn</p>
-                <p style="font-size: 12px; color: #888; margin-top: 5px;">Hỗ trợ: .lua, .txt (tối đa 10MB)</p>
-                <input type="file" id="fileInput" accept=".lua,.txt">
-                <div class="file-name" id="fileName"></div>
-            </div>
-            <div id="fileStatus" class="status"></div>
-            <div style="margin-top: 15px;">
-                <button class="btn" onclick="uploadFile()" id="uploadBtn">🚀 Mã hóa file</button>
-            </div>
-        </div>
+        <div class="grid-2">
+            <!-- Left Column -->
+            <div>
+                <!-- Save Code -->
+                <div class="card">
+                    <h2>💾 Lưu code mới</h2>
+                    <div class="input-group">
+                        <label>Tên code:</label>
+                        <input type="text" id="codeName" placeholder="Nhập tên code...">
+                    </div>
+                    <div class="input-group">
+                        <label>Mô tả:</label>
+                        <input type="text" id="codeDesc" placeholder="Mô tả ngắn về code...">
+                    </div>
+                    <div class="input-group">
+                        <label>Code Lua:</label>
+                        <textarea id="codeInput" placeholder="-- Nhập code Lua của bạn ở đây..."></textarea>
+                    </div>
+                    <button class="btn" onclick="saveCode()" id="saveBtn">💾 Lưu code</button>
+                    <button class="btn btn-secondary" onclick="clearCode()">🗑️ Xóa</button>
+                    <button class="btn btn-secondary" onclick="loadExample()">📝 Ví dụ</button>
+                    <div id="saveStatus" class="status"></div>
+                </div>
 
-        <!-- Encode Code -->
-        <div class="card">
-            <h2>✏️ Mã hóa code Lua</h2>
-            <div class="input-group">
-                <label>Nhập code Lua:</label>
-                <textarea id="codeInput" placeholder="-- Nhập code Lua của bạn ở đây..."></textarea>
+                <!-- Result -->
+                <div class="card" id="resultCard" style="display: none;">
+                    <h2>✅ Kết quả</h2>
+                    <div class="input-group">
+                        <label>Loadstring:</label>
+                        <div class="output">
+                            <textarea id="loadstringOutput" readonly></textarea>
+                            <button class="copy-btn" onclick="copyLoadstring()">📋 Copy</button>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Script đã mã hóa:</label>
+                        <div class="output">
+                            <textarea id="scriptOutput" readonly></textarea>
+                            <button class="copy-btn" onclick="copyScript()">📋 Copy</button>
+                        </div>
+                    </div>
+                    <button class="btn btn-success" onclick="downloadScript()">💾 Tải script</button>
+                    <button class="btn btn-secondary" onclick="clearResult()">🗑️ Xóa</button>
+                </div>
             </div>
-            <button class="btn" onclick="encodeCode()" id="encodeBtn">🔐 Mã hóa</button>
-            <button class="btn btn-secondary" onclick="clearCode()">🗑️ Xóa</button>
-            <button class="btn btn-secondary" onclick="loadExample()">📝 Ví dụ</button>
-        </div>
 
-        <!-- Generate Loadstring -->
-        <div class="card">
-            <h2>🔗 Tạo Loadstring</h2>
-            <div class="input-group">
-                <label>URL file Lua:</label>
-                <input type="text" id="urlInput" placeholder="https://example.com/script.lua">
-            </div>
-            <button class="btn" onclick="generateLoadstring()" id="loadstringBtn">⚡ Tạo Loadstring</button>
-        </div>
+            <!-- Right Column -->
+            <div>
+                <!-- List Codes -->
+                <div class="card">
+                    <h2>📋 Danh sách code</h2>
+                    <div style="margin-bottom: 15px;">
+                        <button class="btn btn-primary" onclick="loadCodeList()">🔄 Tải danh sách</button>
+                        <span id="totalCodes" style="color: #8899aa; margin-left: 10px;"></span>
+                    </div>
+                    <div id="codeList" class="code-list">
+                        <div class="empty-state">
+                            <div class="icon">📭</div>
+                            <p>Chưa có code nào được lưu</p>
+                            <p style="font-size: 12px;">Hãy lưu code đầu tiên của bạn!</p>
+                        </div>
+                    </div>
+                </div>
 
-        <!-- Output -->
-        <div class="card" id="outputCard" style="display: none;">
-            <h2>📋 Kết quả</h2>
-            <div class="output">
-                <textarea id="outputText" readonly></textarea>
-                <button class="copy-btn" onclick="copyOutput()">📋 Copy</button>
-            </div>
-            <div class="stats" id="stats"></div>
-            <div style="margin-top: 15px;">
-                <button class="btn btn-success" onclick="downloadOutput()">💾 Tải xuống</button>
-                <button class="btn btn-danger" onclick="clearOutput()">🗑️ Xóa</button>
+                <!-- Quick Load -->
+                <div class="card">
+                    <h2>🔗 Tải code bằng ID</h2>
+                    <div class="input-group">
+                        <label>Nhập ID code:</label>
+                        <input type="text" id="loadIdInput" placeholder="Ví dụ: ABC12345">
+                    </div>
+                    <button class="btn btn-primary" onclick="loadCodeById()">📥 Tải code</button>
+                    <div id="loadStatus" class="status"></div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        // File upload handling
-        const dropZone = document.getElementById('fileDropZone');
-        const fileInput = document.getElementById('fileInput');
-        const fileName = document.getElementById('fileName');
-        let selectedFile = null;
+        // ============ Save Code ============
+        async function saveCode() {
+            const name = document.getElementById('codeName').value || 'Không tên';
+            const description = document.getElementById('codeDesc').value || '';
+            const code = document.getElementById('codeInput').value;
 
-        dropZone.addEventListener('click', () => fileInput.click());
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.style.borderColor = '#64ffda';
-            dropZone.style.background = 'rgba(100, 255, 218, 0.05)';
-        });
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            dropZone.style.background = 'transparent';
-        });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            dropZone.style.background = 'transparent';
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
-        });
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
-            }
-        });
-
-        function handleFile(file) {
-            const validTypes = ['.lua', '.txt'];
-            const ext = '.' + file.name.split('.').pop().toLowerCase();
-            if (!validTypes.includes(ext)) {
-                showStatus('Vui lòng chọn file .lua hoặc .txt!', 'error');
+            if (!code.trim()) {
+                showSaveStatus('Vui lòng nhập code Lua!', 'error');
                 return;
             }
-            if (file.size > 10 * 1024 * 1024) {
-                showStatus('File quá lớn! Tối đa 10MB.', 'error');
-                return;
+
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Đang lưu...';
+
+            try {
+                const response = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description, code })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('loadstringOutput').value = data.loadstring;
+                    document.getElementById('scriptOutput').value = data.script;
+                    document.getElementById('resultCard').style.display = 'block';
+                    showSaveStatus(`✅ Lưu thành công! ID: ${data.id}`, 'success');
+                    loadCodeList();
+                } else {
+                    showSaveStatus('❌ Lỗi: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showSaveStatus('❌ Lỗi kết nối server: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '💾 Lưu code';
             }
-            selectedFile = file;
-            fileName.textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(2) + ' KB)';
-            showStatus('Đã chọn file: ' + file.name, 'success');
         }
 
-        function showStatus(message, type) {
-            const status = document.getElementById('fileStatus');
+        function showSaveStatus(message, type) {
+            const status = document.getElementById('saveStatus');
             status.textContent = message;
             status.className = 'status ' + type;
         }
 
-        async function uploadFile() {
-            if (!selectedFile) {
-                showStatus('Vui lòng chọn file trước!', 'error');
-                return;
-            }
-
-            const btn = document.getElementById('uploadBtn');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loading"></span> Đang xử lý...';
-
-            const formData = new FormData();
-            formData.append('luaFile', selectedFile);
-
+        // ============ Load Code List ============
+        async function loadCodeList() {
             try {
-                showStatus('Đang mã hóa...', 'info');
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
+                const response = await fetch('/api/list');
                 const data = await response.json();
-                if (data.success) {
-                    document.getElementById('outputText').value = data.encoded;
-                    document.getElementById('outputCard').style.display = 'block';
-                    document.getElementById('stats').innerHTML = `
-                        <div class="stat-item">📁 File: <span>${data.filename}</span></div>
-                        <div class="stat-item">📏 Dung lượng: <span>${(data.size / 1024).toFixed(2)} KB</span></div>
-                        <div class="stat-item">🔐 Đã mã hóa thành công</div>
-                    `;
-                    showStatus('✅ Mã hóa thành công!', 'success');
+                
+                const listDiv = document.getElementById('codeList');
+                const totalSpan = document.getElementById('totalCodes');
+
+                if (data.success && data.total > 0) {
+                    totalSpan.textContent = `(Tổng: ${data.total} code)`;
+                    listDiv.innerHTML = data.codes.map(item => `
+                        <div class="code-item" onclick="viewCode('${item.id}')">
+                            <div class="name">
+                                ${item.name}
+                                <span class="badge badge-info">${item.id}</span>
+                                <span class="badge badge-success">${item.size} chars</span>
+                            </div>
+                            ${item.description ? `<div class="desc">${item.description}</div>` : ''}
+                            <div class="stats">
+                                <span>👁️ ${item.views || 0} views</span>
+                                <span>⬇️ ${item.downloads || 0} downloads</span>
+                                <span>📅 ${new Date(item.createdAt).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                    `).join('');
                 } else {
-                    showStatus('❌ Lỗi: ' + data.error, 'error');
+                    totalSpan.textContent = '(Trống)';
+                    listDiv.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon">📭</div>
+                            <p>Chưa có code nào được lưu</p>
+                            <p style="font-size: 12px;">Hãy lưu code đầu tiên của bạn!</p>
+                        </div>
+                    `;
                 }
             } catch (error) {
-                showStatus('❌ Lỗi kết nối server: ' + error.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '🚀 Mã hóa file';
+                console.error('Lỗi load list:', error);
+                document.getElementById('codeList').innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">⚠️</div>
+                        <p>Lỗi tải danh sách</p>
+                        <p style="font-size: 12px;">${error.message}</p>
+                    </div>
+                `;
             }
         }
 
-        async function encodeCode() {
-            const code = document.getElementById('codeInput').value;
-            if (!code.trim()) {
-                alert('Vui lòng nhập code Lua!');
-                return;
-            }
-
-            const btn = document.getElementById('encodeBtn');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loading"></span> Đang mã hóa...';
-
+        // ============ View Code ============
+        async function viewCode(id) {
             try {
-                const response = await fetch('/encode', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: code })
-                });
-
+                const response = await fetch(`/api/code/${id}`);
                 const data = await response.json();
+                
                 if (data.success) {
-                    document.getElementById('outputText').value = data.encoded;
-                    document.getElementById('outputCard').style.display = 'block';
-                    document.getElementById('stats').innerHTML = `
-                        <div class="stat-item">📝 Code gốc: <span>${data.originalLength} ký tự</span></div>
-                        <div class="stat-item">🔐 Code mã hóa: <span>${data.encodedLength} ký tự</span></div>
-                        <div class="stat-item">📈 Tỉ lệ: <span>${(data.encodedLength / data.originalLength * 100).toFixed(1)}%</span></div>
-                    `;
-                } else {
-                    alert('❌ Lỗi: ' + data.error);
+                    document.getElementById('codeInput').value = data.code.code;
+                    document.getElementById('codeName').value = data.code.name;
+                    document.getElementById('codeDesc').value = data.code.description || '';
+                    
+                    // Tạo loadstring
+                    const baseUrl = window.location.origin;
+                    const loadstring = `loadstring(game:HttpGet("${baseUrl}/api/raw/${id}", true))()`;
+                    document.getElementById('loadstringOutput').value = loadstring;
+                    document.getElementById('scriptOutput').value = data.code.script;
+                    document.getElementById('resultCard').style.display = 'block';
+                    
+                    showSaveStatus(`✅ Đã tải code: ${data.code.name}`, 'success');
                 }
             } catch (error) {
-                alert('❌ Lỗi kết nối server: ' + error.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '🔐 Mã hóa';
+                alert('Lỗi tải code: ' + error.message);
             }
         }
 
-        async function generateLoadstring() {
-            const url = document.getElementById('urlInput').value;
-            if (!url.trim()) {
-                alert('Vui lòng nhập URL!');
+        // ============ Load Code By ID ============
+        async function loadCodeById() {
+            const id = document.getElementById('loadIdInput').value.trim();
+            if (!id) {
+                showLoadStatus('Vui lòng nhập ID code!', 'error');
                 return;
             }
 
-            const btn = document.getElementById('loadstringBtn');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loading"></span> Đang tạo...';
-
             try {
-                const response = await fetch('/generate-loadstring', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url })
-                });
-
+                const response = await fetch(`/api/code/${id}`);
                 const data = await response.json();
+                
                 if (data.success) {
-                    document.getElementById('outputText').value = data.loadstring;
-                    document.getElementById('outputCard').style.display = 'block';
-                    document.getElementById('stats').innerHTML = `
-                        <div class="stat-item">🔗 URL: <span>${data.url}</span></div>
-                        <div class="stat-item">⚡ Loadstring đã tạo</div>
-                    `;
+                    document.getElementById('codeInput').value = data.code.code;
+                    document.getElementById('codeName').value = data.code.name;
+                    document.getElementById('codeDesc').value = data.code.description || '';
+                    
+                    const baseUrl = window.location.origin;
+                    const loadstring = `loadstring(game:HttpGet("${baseUrl}/api/raw/${id}", true))()`;
+                    document.getElementById('loadstringOutput').value = loadstring;
+                    document.getElementById('scriptOutput').value = data.code.script;
+                    document.getElementById('resultCard').style.display = 'block';
+                    
+                    showLoadStatus(`✅ Đã tải code: ${data.code.name}`, 'success');
+                    loadCodeList();
                 } else {
-                    alert('❌ Lỗi: ' + data.error);
+                    showLoadStatus('❌ Không tìm thấy code với ID này', 'error');
                 }
             } catch (error) {
-                alert('❌ Lỗi kết nối server: ' + error.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '⚡ Tạo Loadstring';
+                showLoadStatus('❌ Lỗi: ' + error.message, 'error');
             }
         }
 
+        function showLoadStatus(message, type) {
+            const status = document.getElementById('loadStatus');
+            status.textContent = message;
+            status.className = 'status ' + type;
+        }
+
+        // ============ Copy Functions ============
+        function copyLoadstring() {
+            const output = document.getElementById('loadstringOutput');
+            output.select();
+            document.execCommand('copy');
+            alert('✅ Đã copy loadstring!');
+        }
+
+        function copyScript() {
+            const output = document.getElementById('scriptOutput');
+            output.select();
+            document.execCommand('copy');
+            alert('✅ Đã copy script!');
+        }
+
+        // ============ Download ============
+        function downloadScript() {
+            const script = document.getElementById('scriptOutput').value;
+            if (!script) {
+                alert('Không có script để tải!');
+                return;
+            }
+            const blob = new Blob([script], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'script.lua';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // ============ Utilities ============
         function loadExample() {
             document.getElementById('codeInput').value = `-- Ví dụ code Lua
 print("Hello World!")
@@ -486,54 +572,29 @@ print("Kết quả: " .. result)
 game.Players.PlayerAdded:Connect(function(player)
     print(player.Name .. " đã vào game!")
 end)`;
-        }
-
-        function copyOutput() {
-            const output = document.getElementById('outputText');
-            output.select();
-            document.execCommand('copy');
-            alert('✅ Đã copy kết quả!');
-        }
-
-        function downloadOutput() {
-            const output = document.getElementById('outputText').value;
-            if (!output) {
-                alert('Không có dữ liệu để tải!');
-                return;
-            }
-            const blob = new Blob([output], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'encoded_script.lua';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            document.getElementById('codeName').value = 'Ví dụ code';
+            document.getElementById('codeDesc').value = 'Đây là code ví dụ';
         }
 
         function clearCode() {
             document.getElementById('codeInput').value = '';
+            document.getElementById('codeName').value = '';
+            document.getElementById('codeDesc').value = '';
+            document.getElementById('saveStatus').className = 'status';
+            document.getElementById('saveStatus').textContent = '';
         }
 
-        function clearOutput() {
-            document.getElementById('outputText').value = '';
-            document.getElementById('outputCard').style.display = 'none';
-            document.getElementById('stats').innerHTML = '';
+        function clearResult() {
+            document.getElementById('loadstringOutput').value = '';
+            document.getElementById('scriptOutput').value = '';
+            document.getElementById('resultCard').style.display = 'none';
         }
 
-        // Check server health
-        async function checkHealth() {
-            try {
-                const response = await fetch('/health');
-                const data = await response.json();
-                console.log('✅ Server OK:', data);
-            } catch (error) {
-                console.warn('⚠️ Server health check failed:', error.message);
-            }
-        }
-        checkHealth();
-        setInterval(checkHealth, 60000); // Check every minute
+        // ============ Auto Load ============
+        loadCodeList();
+
+        // Refresh list every 30 seconds
+        setInterval(loadCodeList, 30000);
     </script>
 </body>
 </html>
