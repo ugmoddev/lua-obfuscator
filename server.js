@@ -163,16 +163,13 @@ function generateRandomString(length) {
   return result;
 }
 
-function encryptData(data) {
-  const encoded = Buffer.from(data).toString('base64');
-  return encoded.split('').map((c, i) => {
-    if (i % 3 === 0) return String.fromCharCode(c.charCodeAt(0) ^ 0x05);
-    if (i % 3 === 1) return String.fromCharCode(c.charCodeAt(0) ^ 0x0A);
-    return c;
-  }).join('');
+// MÃ HÓA DỮ LIỆU AN TOÀN - KHÔNG DÙNG KÝ TỰ ESCAPE
+function encryptDataSafe(data) {
+  // Mã hóa base64 đơn giản, không dùng ký tự đặc biệt
+  return Buffer.from(data).toString('base64');
 }
 
-// Mã hóa code với ID được nhúng vào _bsdata0
+// Mã hóa code với ID nhúng vào _bsdata0 - SỬ DỤNG STRING AN TOÀN
 function encodeLuaCodeWithId(code, id) {
   const num1 = Math.floor(Math.random() * 2147483647);
   const num2 = Math.floor(Math.random() * 2147483647);
@@ -186,10 +183,10 @@ function encodeLuaCodeWithId(code, id) {
   const randomString2 = generateRandomString(20);
   const randomString3 = generateRandomString(15);
   
+  // Chỉ dùng hex string và base64 (an toàn, không có ký tự escape)
   const hexString = Buffer.from(code).toString('hex');
-  const encryptedData = encryptData(code);
+  const encryptedData = encryptDataSafe(code);
   
-  // ID được nhúng vào _bsdata0 để script có thể tìm ra
   return `_bsdata0 = {
     ${num1},
     '${randomString1}',
@@ -209,14 +206,13 @@ function encodeLuaCodeWithId(code, id) {
 
 // ============ TẠO SCRIPT CHỈ CHỨA DOMAIN ============
 function createFullScript(encoded, id, baseUrl) {
-  // Chỉ chứa domain, không chứa ID trong URL
   return `${encoded}
 
 -- Chỉ lưu domain, không lưu ID
 local domain = "${baseUrl}"
 
 -- Lấy ID từ _bsdata0
-local scriptId = _bsdata0[13]  -- Phần tử thứ 13 chứa ID
+local scriptId = _bsdata0[13]
 
 -- Tạo tên file từ ID
 local fileName = "static_content_130526/init-" .. scriptId .. ".lua"
@@ -262,18 +258,13 @@ app.post('/api/save', (req, res) => {
     const id = generateId();
     const timestamp = new Date().toISOString();
     
-    // Lấy base URL
     const protocol = req.protocol;
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
     
-    // Mã hóa code với ID nhúng vào _bsdata0
     const encoded = encodeLuaCodeWithId(code, id);
-    
-    // Tạo script chỉ chứa domain
     const script = createFullScript(encoded, id, baseUrl);
 
-    // Lưu vào database
     codes[id] = {
       id: id,
       name: name || 'Không tên',
@@ -288,14 +279,11 @@ app.post('/api/save', (req, res) => {
       size: code.length
     };
 
-    // Lưu code vào file static
     const staticFile = path.join(STATIC_DIR, `init-${id}.lua`);
     fs.writeFileSync(staticFile, code, 'utf8');
 
     if (saveCodes(codes)) {
       console.log(`✅ Đã lưu code ID: ${id}, Tên: ${codes[id].name}`);
-      console.log(`📁 File: ${staticFile}`);
-      console.log(`🔗 Domain: ${baseUrl}`);
       
       res.json({
         success: true,
@@ -338,12 +326,10 @@ app.get('/api/raw/:id', (req, res) => {
 
     console.log(`✅ Tìm thấy code: ${codes[id].name}`);
     
-    // Tăng lượt xem
     codes[id].views = (codes[id].views || 0) + 1;
     codes[id].updatedAt = new Date().toISOString();
     saveCodes(codes);
 
-    // Trả về script đã mã hóa
     res.set('Content-Type', 'text/plain');
     res.send(codes[id].script);
 
@@ -452,7 +438,6 @@ app.delete('/api/delete/:id', (req, res) => {
     delete codes[id];
     saveCodes(codes);
 
-    // Xóa file static
     const staticFile = path.join(STATIC_DIR, `init-${id}.lua`);
     if (fs.existsSync(staticFile)) {
       fs.unlinkSync(staticFile);
