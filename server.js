@@ -163,13 +163,10 @@ function generateRandomString(length) {
   return result;
 }
 
-// MÃ HÓA DỮ LIỆU AN TOÀN - KHÔNG DÙNG KÝ TỰ ESCAPE
 function encryptDataSafe(data) {
-  // Mã hóa base64 đơn giản, không dùng ký tự đặc biệt
   return Buffer.from(data).toString('base64');
 }
 
-// Mã hóa code với ID nhúng vào _bsdata0 - SỬ DỤNG STRING AN TOÀN
 function encodeLuaCodeWithId(code, id) {
   const num1 = Math.floor(Math.random() * 2147483647);
   const num2 = Math.floor(Math.random() * 2147483647);
@@ -183,7 +180,6 @@ function encodeLuaCodeWithId(code, id) {
   const randomString2 = generateRandomString(20);
   const randomString3 = generateRandomString(15);
   
-  // Chỉ dùng hex string và base64 (an toàn, không có ký tự escape)
   const hexString = Buffer.from(code).toString('hex');
   const encryptedData = encryptDataSafe(code);
   
@@ -204,39 +200,28 @@ function encodeLuaCodeWithId(code, id) {
 }`;
 }
 
-// ============ TẠO SCRIPT CHỈ CHỨA DOMAIN ============
+// ============ TẠO SCRIPT MỚI - KHÔNG CÓ LỖI val_9 ============
 function createFullScript(encoded, id, baseUrl) {
   return `${encoded}
 
--- Chỉ lưu domain, không lưu ID
+-- Lấy domain và ID
 local domain = "${baseUrl}"
-
--- Lấy ID từ _bsdata0
 local scriptId = _bsdata0[13]
-
--- Tạo tên file từ ID
 local fileName = "static_content_130526/init-" .. scriptId .. ".lua"
 
--- Đọc file nếu tồn tại
+-- Tạo thư mục nếu chưa có
+local makefolderResult = makefolder("static_content_130526")
+
+-- Tải code từ web
+local httpGet = game:HttpGet(domain .. "/api/raw-code/" .. scriptId, true)
+writefile(fileName, httpGet)
+
+-- Đọc file đã lưu
 local readfileResult = readfile(fileName)
 local fileContent_3 = #readfileResult
 
--- Tạo thư mục
-local makefolderResult = makefolder("static_content_130526")
-
--- Tải code từ web (chỉ dùng domain + ID lấy từ _bsdata0)
-writefile(fileName, game:HttpGet(domain .. "/api/raw-code/" .. scriptId, true))
-
--- Đọc danh sách file
-local listfilesResult = listfiles("./static_content_130526")
-local match = val_9:match('(init%-.-)%.lua$')
-local static_content_130526 = "static_content_130526" .. "/" .. match .. ".lua"
-
--- Xóa file
-local delfileResult = delfile("static_content_130526")
-
--- Load code từ web (chỉ dùng domain + ID lấy từ _bsdata0)
-local loaded = loadstring(game:HttpGet(domain .. "/api/raw-code/" .. scriptId, true))()
+-- Load và chạy code
+local loaded = loadstring(httpGet)()
 return loaded`;
 }
 
@@ -339,7 +324,7 @@ app.get('/api/raw/:id', (req, res) => {
   }
 });
 
-// 3. Lấy code gốc (cho readfile và loadstring bên trong script)
+// 3. Lấy code gốc
 app.get('/api/raw-code/:id', (req, res) => {
   try {
     const { id } = req.params;
