@@ -3,7 +3,6 @@ const multer = require('multer');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -144,7 +143,7 @@ function escapeLuaString(str) {
     .replace(/\t/g, '\\t');
 }
 
-// ============ HÀM MÃ HÓA NÂNG CAO ============
+// ============ HÀM MÃ HÓA ĐƠN GIẢN VÀ ỔN ĐỊNH ============
 
 function generateId(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -164,66 +163,31 @@ function generateRandomString(length) {
   return result;
 }
 
-// Mã hóa XOR đa lớp
-function xorEncrypt(data, key) {
-  let result = '';
-  for (let i = 0; i < data.length; i++) {
-    const charCode = data.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-    result += String.fromCharCode(charCode);
-  }
-  return result;
-}
-
-// Mã hóa code thành dạng khó đọc
-function encodeLuaCodeAdvanced(code, id) {
+// Mã hóa đơn giản nhưng hiệu quả
+function encodeLuaCode(code, id) {
+  // Chuyển code thành hex
+  const hex = Buffer.from(code).toString('hex');
+  
   // Tạo key ngẫu nhiên
-  const key1 = generateRandomString(16);
-  const key2 = generateRandomString(16);
-  const key3 = generateRandomString(16);
+  const key = generateRandomString(32);
   
-  // Mã hóa XOR nhiều lớp
-  let encrypted = code;
-  encrypted = xorEncrypt(encrypted, key1);
-  encrypted = xorEncrypt(encrypted, key2);
-  encrypted = xorEncrypt(encrypted, key3);
+  // Tạo script với biến ngẫu nhiên
+  const varName = '_' + generateRandomString(8);
+  const varName2 = '_' + generateRandomString(8);
   
-  // Chuyển sang base64
-  const base64 = Buffer.from(encrypted, 'binary').toString('base64');
-  
-  // Tạo tên biến ngẫu nhiên
-  const varName = '_' + generateRandomString(6);
-  const varName2 = '_' + generateRandomString(6);
-  const varName3 = '_' + generateRandomString(6);
-  
-  // Tạo các mảng số ngẫu nhiên (nhiễu)
-  const junk1 = Array.from({length: 20}, () => Math.floor(Math.random() * 999999));
-  const junk2 = Array.from({length: 15}, () => Math.floor(Math.random() * 999999));
-  const junk3 = Array.from({length: 10}, () => Math.floor(Math.random() * 999999));
-  
-  // Tạo script với tên biến ngẫu nhiên và nhiễu
-  return `local ${varName} = "${key1}"
-local ${varName2} = "${key2}"
-local ${varName3} = "${key3}"
-local ${varName}4 = "${base64}"
-local ${varName}5 = "${id}"
+  return `local ${varName} = "${hex}"
+local ${varName2} = "${key}"
 
-local function ${varName}6(str, key)
-    local result = ""
-    for i = 1, #str do
-        local char = string.byte(str, i)
-        local keyChar = string.byte(key, (i - 1) % #key + 1)
-        result = result .. string.char(bit32.bxor(char, keyChar))
-    end
-    return result
+-- Giải mã hex
+local function ${varName}3(str)
+    return (str:gsub("..", function(cc)
+        return string.char(tonumber(cc, 16))
+    end))
 end
 
--- Giải mã nhiều lớp
-local ${varName}7 = ${varName}6(${varName}4, ${varName}3)
-local ${varName}8 = ${varName}6(${varName}7, ${varName}2)
-local ${varName}9 = ${varName}6(${varName}8, ${varName})
-
--- Code đã giải mã
-local ${varName}10 = ${varName}9`;
+-- Giải mã và lưu vào biến
+local ${varName}4 = ${varName}3(${varName})
+local _decoded = ${varName}4`;
 }
 
 // ============ TẠO SCRIPT HOÀN CHỈNH ============
@@ -233,18 +197,15 @@ function createFullScript(encoded, id, baseUrl) {
 -- Tạo thư mục
 local makefolderResult = makefolder("static_content_130526")
 
--- Lấy code đã giải mã từ biến
-local decodedCode = ${varName}10
+-- Ghi code vào file
+writefile("static_content_130526/init-${id}.lua", _decoded)
 
--- Ghi vào file
-writefile("static_content_130526/init-" .. "${id}" .. ".lua", decodedCode)
-
--- Đọc file
-local readfileResult = readfile("static_content_130526/init-" .. "${id}" .. ".lua")
+-- Đọc file để xác nhận
+local readfileResult = readfile("static_content_130526/init-${id}.lua")
 local fileContent = #readfileResult
 
 -- Load và chạy code
-local loaded = loadstring(decodedCode)()
+local loaded = loadstring(_decoded)()
 return loaded`;
 }
 
@@ -270,28 +231,11 @@ app.post('/api/save', (req, res) => {
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
     
-    // Sử dụng mã hóa nâng cao
-    const encoded = encodeLuaCodeAdvanced(code, id);
+    // Mã hóa code
+    const encoded = encodeLuaCode(code, id);
     
-    // Tạo script
-    const script = `${encoded}
-
--- Tạo thư mục
-local makefolderResult = makefolder("static_content_130526")
-
--- Lấy code đã giải mã từ biến _decoded
-local decodedCode = _decoded
-
--- Ghi vào file
-writefile("static_content_130526/init-${id}.lua", decodedCode)
-
--- Đọc file
-local readfileResult = readfile("static_content_130526/init-${id}.lua")
-local fileContent = #readfileResult
-
--- Load và chạy code
-local loaded = loadstring(decodedCode)()
-return loaded`;
+    // Tạo script hoàn chỉnh
+    const script = createFullScript(encoded, id, baseUrl);
 
     // Lưu vào database
     codes[id] = {
@@ -308,6 +252,7 @@ return loaded`;
       size: code.length
     };
 
+    // Lưu code gốc vào file static
     const staticFile = path.join(STATIC_DIR, `init-${id}.lua`);
     fs.writeFileSync(staticFile, code, 'utf8');
 
@@ -340,7 +285,7 @@ return loaded`;
   }
 });
 
-// 2. Lấy script đã mã hóa
+// 2. Lấy script đã mã hóa (cho loadstring)
 app.get('/api/raw/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -355,6 +300,7 @@ app.get('/api/raw/:id', (req, res) => {
 
     console.log(`✅ Tìm thấy code: ${codes[id].name}`);
     
+    // Tăng lượt xem
     codes[id].views = (codes[id].views || 0) + 1;
     codes[id].updatedAt = new Date().toISOString();
     saveCodes(codes);
@@ -368,7 +314,7 @@ app.get('/api/raw/:id', (req, res) => {
   }
 });
 
-// 3. Lấy code gốc
+// 3. Lấy code gốc (cho readfile)
 app.get('/api/raw-code/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -489,7 +435,23 @@ app.delete('/api/delete/:id', (req, res) => {
   }
 });
 
-// 7. Health check
+// 7. Xem nội dung codes.lua
+app.get('/api/view-db', (req, res) => {
+  try {
+    if (fs.existsSync(CODES_FILE)) {
+      const content = fs.readFileSync(CODES_FILE, 'utf8');
+      res.set('Content-Type', 'text/plain');
+      res.send(content);
+    } else {
+      res.status(404).send('File codes.lua chưa được tạo');
+    }
+  } catch (error) {
+    console.error('Lỗi view-db:', error);
+    res.status(500).send('Lỗi server');
+  }
+});
+
+// 8. Health check
 app.get('/health', (req, res) => {
   try {
     const codes = loadCodes();
@@ -517,7 +479,7 @@ app.get('/health', (req, res) => {
   }
 });
 
-// 8. Root
+// 9. Root - Serve index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
