@@ -23,7 +23,6 @@ const CODES_FILE = path.join(DATA_DIR, 'codes.lua');
 
 // ============ HÀM ĐỌC/GHI DATABASE ============
 
-// Đọc dữ liệu codes từ file Lua
 function loadCodes() {
   try {
     if (fs.existsSync(CODES_FILE)) {
@@ -36,7 +35,6 @@ function loadCodes() {
   return {};
 }
 
-// Parse Lua table sang JavaScript object (hỗ trợ raw string [[...]])
 function parseLuaTable(content) {
   try {
     const match = content.match(/return\s*\{([\s\S]*)\}/);
@@ -45,7 +43,6 @@ function parseLuaTable(content) {
     const tableContent = match[1];
     const codes = {};
     
-    // Tìm các entry với raw string [[...]]
     const entryRegex = /\["([^"]+)"\]\s*=\s*\{([\s\S]*?)\},?\s*(?=\[|$)/g;
     let entryMatch;
     
@@ -55,14 +52,12 @@ function parseLuaTable(content) {
       
       const code = {};
       
-      // Lấy các field bình thường
       const nameMatch = fields.match(/name\s*=\s*"([^"]*)"/);
       if (nameMatch) code.name = nameMatch[1];
       
       const descMatch = fields.match(/description\s*=\s*"([^"]*)"/);
       if (descMatch) code.description = descMatch[1];
       
-      // Lấy raw string (quan trọng nhất)
       const codeMatch = fields.match(/code\s*=\s*\[\[([\s\S]*?)\]\],/);
       if (codeMatch) code.code = codeMatch[1];
       
@@ -100,7 +95,6 @@ function parseLuaTable(content) {
   }
 }
 
-// Lưu dữ liệu codes vào file Lua (dùng raw string)
 function saveCodes(codes) {
   try {
     let content = '-- Auto-generated codes database\n';
@@ -133,7 +127,6 @@ function saveCodes(codes) {
   }
 }
 
-// Escape chuỗi cho Lua
 function escapeLuaString(str) {
   if (!str) return '';
   return str
@@ -146,7 +139,6 @@ function escapeLuaString(str) {
 
 // ============ HÀM MÃ HÓA ============
 
-// Tạo ID ngẫu nhiên
 function generateId(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let id = '';
@@ -156,7 +148,6 @@ function generateId(length = 8) {
   return id;
 }
 
-// Tạo chuỗi ngẫu nhiên
 function generateRandomString(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._';
   let result = '';
@@ -166,7 +157,6 @@ function generateRandomString(length) {
   return result;
 }
 
-// Mã hóa dữ liệu
 function encryptData(data) {
   const encoded = Buffer.from(data).toString('base64');
   return encoded.split('').map((c, i) => {
@@ -176,7 +166,6 @@ function encryptData(data) {
   }).join('');
 }
 
-// Hàm mã hóa code theo đúng định dạng _bsdata0
 function encodeLuaCode(code) {
   const num1 = Math.floor(Math.random() * 2147483647);
   const num2 = Math.floor(Math.random() * 2147483647);
@@ -209,19 +198,20 @@ function encodeLuaCode(code) {
 }`;
 }
 
-// Tạo script hoàn chỉnh
-function createFullScript(encoded, id, host) {
+// ============ TẠO SCRIPT VỚI URL CỦA WEB ============
+function createFullScript(encoded, id, baseUrl) {
+  // Sử dụng baseUrl của web thay vì cdn.luacrack.site
   return `${encoded}
 
 local readfileResult = readfile('static_content_130526/init-74c74f95foy-marbeg.lua')
 local fileContent_3 = #readfileResult
 local makefolderResult = makefolder("static_content_130526")
-writefile('static_content_130526/init-74c74f95foy-marbeg.lua', game:HttpGet("https://cdn.luacrack.site/v4_init_marbeg.lua"))
+writefile('static_content_130526/init-74c74f95foy-marbeg.lua', game:HttpGet("${baseUrl}/api/raw/${id}", true))
 local listfilesResult = listfiles("./static_content_130526")
     local match = val_9:match('(init%-.-)%.lua$')
     local static_content_130526 = "static_content_130526" .. "/" .. match .. ".lua"
     local delfileResult = delfile("static_content_130526")
-local loaded = loadstring(game:HttpGet("https://cdn.luacrack.site/v4_init_marbeg.lua", true))()
+local loaded = loadstring(game:HttpGet("${baseUrl}/api/raw/${id}", true))()
 return loaded`;
 }
 
@@ -245,11 +235,14 @@ app.post('/api/save', (req, res) => {
     
     // Mã hóa code
     const encoded = encodeLuaCode(code);
-    const host = req.get('host');
-    const protocol = req.protocol;
     
-    // Tạo script hoàn chỉnh
-    const script = createFullScript(encoded, id, host);
+    // Lấy base URL của web
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const baseUrl = `${protocol}://${host}`;
+    
+    // Tạo script với URL của web
+    const script = createFullScript(encoded, id, baseUrl);
 
     // Lưu vào database
     codes[id] = {
@@ -268,12 +261,13 @@ app.post('/api/save', (req, res) => {
 
     if (saveCodes(codes)) {
       console.log(`✅ Đã lưu code ID: ${id}, Tên: ${codes[id].name}`);
+      console.log(`🔗 URL: ${baseUrl}/api/raw/${id}`);
       
       res.json({
         success: true,
         id: id,
-        loadstring: `loadstring(game:HttpGet("${protocol}://${host}/api/raw/${id}", true))()`,
-        url: `${protocol}://${host}/api/raw/${id}`,
+        loadstring: `loadstring(game:HttpGet("${baseUrl}/api/raw/${id}", true))()`,
+        url: `${baseUrl}/api/raw/${id}`,
         script: script,
         encoded: encoded,
         totalCodes: Object.keys(codes).length
@@ -391,7 +385,6 @@ app.get('/api/list', (req, res) => {
       size: item.size || item.code?.length || 0
     }));
     
-    // Sắp xếp theo thời gian tạo mới nhất
     list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
     res.json({
@@ -543,7 +536,6 @@ app.listen(PORT, () => {
   console.log(`📁 Data directory: ${DATA_DIR}`);
   console.log(`📄 File database: ${CODES_FILE}`);
   
-  // Kiểm tra file codes.lua
   if (fs.existsSync(CODES_FILE)) {
     const stats = fs.statSync(CODES_FILE);
     console.log(`📊 File size: ${(stats.size / 1024).toFixed(2)} KB`);
